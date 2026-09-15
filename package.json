@@ -1,0 +1,12 @@
+{
+  "name": "gmac",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicacion GMAC de apoyo, alertas, geolocalizacion y vinculacion entre dispositivos.",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

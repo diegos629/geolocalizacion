@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#7c948a" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; frame-src https://maps.google.com https://www.google.com; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
+    <meta
+      name="description"
+      content="Aplicación móvil para el seguimiento de caídas y problemas clínicos con geolocalización."
+    />
+    <title>G.M.A.C</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" type="image/png" href="logo png/image-removebg-preview.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <aside id="leftRail" class="left-rail hidden" aria-label="Menú lateral">
+        <div class="rail-header">
+          <div class="rail-brand">G.M.A.C</div>
+          <button id="closeRailBtn" class="rail-close" type="button" aria-label="Cerrar menú lateral">×</button>
+        </div>
+        <nav class="rail-nav" aria-label="Navegación principal">
+          <button class="rail-btn active" type="button">Inicio</button>
+          <button class="rail-btn" type="button">Historial</button>
+          <button class="rail-btn" type="button">Ubicación</button>
+          <button id="infoRailBtn" class="rail-btn" type="button">Información</button>
+          <button id="callRailBtn" class="rail-btn call-rail-btn" type="button">Llamar</button>
+          <button id="bluetoothBtn" class="rail-btn bluetooth-rail-btn" type="button" hidden>Bluetooth</button>
+          <button id="logoutBtn" class="rail-btn danger" type="button">Cerrar sesión</button>
+        </nav>
+      </aside>
+      <button id="openRailBtn" class="rail-open hidden" type="button" aria-label="Abrir menú lateral" aria-expanded="false">☰</button>
+
+      <section id="loginCard" class="tutor-login login-card" aria-labelledby="tutorLoginTitle">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Sistema de apoyo G.M.A.C</p>
+            <h1>Ingresar</h1>
+          </div>
+          <span class="session-badge">Acceso</span>
+        </div>
+        <div class="role-switch" role="tablist" aria-label="Tipo de acceso">
+          <button id="userRoleBtn" class="role-btn" type="button" role="tab" aria-selected="false">Persona usuaria</button>
+          <button id="tutorRoleBtn" class="role-btn" type="button" role="tab" aria-selected="false">Tutor</button>
+        </div>
+        <p id="loginIntro" class="login-intro">Elige cómo vas a ingresar para continuar.</p>
+        <form id="userLoginForm" class="hidden">
+          <label>
+            Nombre
+            <input id="userName" type="text" placeholder="Nombre de la persona" required />
+          </label>
+          <label>
+            Correo de la cuenta
+            <input id="userEmail" type="email" placeholder="persona@ejemplo.com" autocomplete="email" required />
+          </label>
+          <label>
+            Teléfono de la persona usuaria
+            <input id="userPhone" type="tel" placeholder="Ej: +54 11 1234 5678" autocomplete="tel" />
+          </label>
+          <label>
+            Contraseña
+            <input id="userPassword" type="password" placeholder="Mínimo 6 caracteres" minlength="6" required />
+          </label>
+          <button type="submit">Ingresar como persona usuaria</button>
+        </form>
+        <form id="tutorLoginForm" class="hidden">
+          <label>
+            Correo de la cuenta
+            <input id="loginEmail" type="email" placeholder="tutor@ejemplo.com" autocomplete="email" required />
+          </label>
+          <label>
+            Contraseña
+            <input id="loginPassword" type="password" placeholder="Mínimo 6 caracteres" autocomplete="current-password" minlength="6" required />
+          </label>
+          <label>
+            Código de vinculación
+            <input id="loginPairingCode" type="text" placeholder="Ej: GMAC-4821" minlength="9" required />
+            <small>Escríbelo con o sin mayúsculas; ambas formas funcionan.</small>
+          </label>
+          <button type="submit">Ingresar y vincular</button>
+        </form>
+        <button id="installBtn" class="install-btn login-install-btn" type="button">Descargar app</button>
+        <p id="installHint" class="install-hint">Instala esta app en tu pantalla de inicio desde Chrome para usarla como acceso rápido.</p>
+        <p class="login-note">El código se genera desde la cuenta de la persona usuaria. Esta versión local vincula cuentas en el mismo navegador.</p>
+      </section>
+
+      <section id="appContent" class="app-card hidden">
+        <div class="topbar">
+          <div>
+            <p class="eyebrow">Sistema de apoyo</p>
+            <h1>G.M.A.C</h1>
+            <span id="accountBadge" class="account-badge">Cuenta activa</span>
+          </div>
+          <div class="topbar-actions">
+            <button id="registerTutorBtn" class="topbar-btn" type="button" aria-expanded="false" hidden>
+              Registrar tutor
+            </button>
+            <button id="themeToggleBtn" class="topbar-btn" type="button" aria-label="Cambiar tema">
+              Modo oscuro
+            </button>
+          </div>
+        </div>
+
+        <div id="bluetoothStatus" class="connection-status" aria-live="polite"></div>
+
+        <div class="alert-box">
+          Monitoreo para niños, adultos y personas mayores, con seguimiento de caídas, mareos y problemas clínicos.
+        </div>
+
+        <section id="infoPanel" class="info-panel hidden" aria-live="polite">
+          <h2>Información de la cuenta</h2>
+          <div class="info-panel-section">
+            <h3>Persona usuaria</h3>
+            <div class="info-panel-grid">
+              <div><span>Nombre</span><strong id="infoUserName">--</strong></div>
+              <div><span>Correo</span><strong id="infoUserEmail">--</strong></div>
+              <div><span>Teléfono</span><strong id="infoUserPhone">--</strong></div>
+              <div><span>Código</span><strong id="infoCode">--</strong></div>
+            </div>
+          </div>
+          <div class="info-panel-section">
+            <h3>Tutor</h3>
+            <div class="info-panel-grid">
+              <div><span>Nombre</span><strong id="infoTutorName">--</strong></div>
+              <div><span>Correo</span><strong id="infoTutorEmail">--</strong></div>
+              <div><span>Teléfono</span><strong id="infoTutorPhone">--</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <button id="emergencyBtn" class="emergency-btn" type="button" hidden>Emergencia</button>
+        <div id="locationPanel" class="tutor-only">
+          <button id="locateBtn" type="button">Actualizar ubicación</button>
+
+          <div id="status" class="status" aria-live="polite">
+            Esperando el permiso para acceder a la ubicación...
+          </div>
+
+          <div id="map" class="map-card map-placeholder" aria-label="Mapa de ubicación">
+            <strong>Mapa pendiente</strong>
+            <span>Pulsa “Actualizar ubicación” para cargar la posición.</span>
+          </div>
+
+          <div class="info-grid">
+            <div class="info-item">
+              <span>Latitud</span>
+              <strong id="latitud">--</strong>
+            </div>
+            <div class="info-item">
+              <span>Longitud</span>
+              <strong id="longitud">--</strong>
+            </div>
+            <div class="info-item">
+              <span>Precisión</span>
+              <strong id="precision">--</strong>
+            </div>
+            <div class="info-item">
+              <span>Hora</span>
+              <strong id="tiempo">--</strong>
+            </div>
+          </div>
+
+          <div class="actions">
+            <a id="mapLink" class="map-link" href="#" target="_blank" rel="noreferrer" hidden>
+              Abrir en Google Maps
+            </a>
+            <button id="copyLocationBtn" class="secondary" type="button">Copiar URL de ubicación</button>
+          </div>
+        </div>
+
+        <div id="alertBox" class="alert-box hidden" aria-live="assertive"></div>
+
+        <section id="userPairingBox" class="pairing-panel hidden" aria-live="polite">
+          <div class="pairing-box user-pairing-box">
+            <span>Código para vincular</span>
+            <strong id="userPairingCode">--</strong>
+            <small>Comparte este código con tu tutor para vincular la cuenta.</small>
+            <label>
+              Teléfono del tutor para emergencias
+              <input id="emergencyTutorPhone" type="tel" placeholder="Ej: +54 11 1234 5678" autocomplete="tel" />
+            </label>
+            <div class="user-pairing-actions">
+              <button id="copyPairingBtn" class="secondary" type="button">Copiar código</button>
+              <button id="refreshPairingBtn" class="secondary" type="button">Generar otro</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="tutorPanel" class="watch-panel hidden">
+          <div class="watch-header">
+            <h2>Vigilancia del reloj</h2>
+            <label class="toggle">
+              <input id="watchToggle" type="checkbox" />
+              <span>Activar</span>
+            </label>
+          </div>
+
+          <div class="tutor-box">
+            <label>
+              Número de la persona usuaria
+              <input id="tutorUserPhone" type="tel" placeholder="Ej: +54 11 1234 5678" autocomplete="tel" />
+            </label>
+            <label>
+              Tutor / responsable
+              <input id="tutorName" type="text" placeholder="Nombre del tutor" />
+            </label>
+            <label>
+              Correo del tutor / cuenta
+              <input id="tutorEmail" type="email" placeholder="correo@ejemplo.com" />
+            </label>
+            <label>
+              Teléfono / contacto
+              <input id="tutorPhone" type="tel" placeholder="Ej: +54 11 1234 5678" />
+            </label>
+          </div>
+
+          <div class="tutor-actions">
+            <button id="saveTutorBtn" class="secondary" type="button">Vincular tutor</button>
+            <button id="sendAlertBtn" class="secondary" type="button">Enviar alerta al tutor</button>
+          </div>
+          <div class="pairing-box">
+            <span>Código de vinculación</span>
+            <strong id="pairingCode">--</strong>
+            <button id="generateCodeBtn" class="secondary" type="button">Generar código</button>
+          </div>
+        </section>
+
+        <form id="eventForm" class="event-form" hidden>
+          <h2>Registrar evento</h2>
+
+          <label>
+            Tipo de evento
+            <select id="eventType" name="eventType">
+              <option value="Caída">Caída</option>
+              <option value="Mareos">Mareos</option>
+              <option value="Dolor">Dolor</option>
+              <option value="Desmayo">Desmayo</option>
+              <option value="Problema clínico">Problema clínico</option>
+              <option value="Otro">Otro</option>
+            </select>
+          </label>
+
+          <label>
+            Observación
+            <textarea id="eventNote" name="eventNote" rows="3" placeholder="Describe lo ocurrido..."></textarea>
+          </label>
+
+          <button type="submit" class="save-btn">Guardar en historial</button>
+        </form>
+
+        <section class="history-panel">
+          <div class="history-header">
+            <h3>Historial</h3>
+            <div class="history-controls">
+              <span id="historyCount">0</span>
+              <button id="historyToggleBtn" class="history-toggle-btn" type="button" aria-expanded="true">
+                Minimizar
+              </button>
+            </div>
+          </div>
+          <ul id="historyList" class="history-list"></ul>
+        </section>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>

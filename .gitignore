@@ -1,0 +1,14 @@
+# Sistema operativo
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# Logs y archivos temporales
+*.log
+*.tmp
+
+# Archivos locales
+.env
+.env.*

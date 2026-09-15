@@ -1,0 +1,14 @@
+{
+  "name": "G.M.A.C",
+  "short_name": "G.M.A.C",
+  "description": "Aplicación G.M.A.C para apoyo, alertas y geolocalización.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f4fbff",
+  "theme_color": "#0f766e",
+  "orientation": "portrait",
+  "scope": "/",
+  "icons": [
+    { "src": "logo png/image-removebg-preview.png", "sizes": "any", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

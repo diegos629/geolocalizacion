@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Logo GMAC">
+  <path fill="#111" d="M64 7a57 57 0 0 1 48 27c2 3 0 6-4 6H96a45 45 0 1 0 8 38l-3 10a56 56 0 1 1-37-81Zm42 76c4 0 6 3 5 6a57 57 0 0 1-10 17l-9-7a45 45 0 0 0 8-16h6Z" />
+  <path fill="#111" d="m64 8-17 34h34L64 8Zm0 16 7 13H57l7-13Z" />
+  <path fill="#111" d="M32 42h18l14 20 14-20h18v42H82V64L64 87 46 64v20H32V42Z" />
+  <path fill="#111" d="m29 84 17-31 11 16-15 28-13-7Zm70 0-17-31-11 16 15 28 13-7Z" />
+</svg>

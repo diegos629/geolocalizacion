@@ -28,6 +28,13 @@ No abras `index.html` directamente con `file://`: en ese modo cada dispositivo u
 - Muestra latitud, longitud, precisión y hora.
 - Genera un enlace para ver la posición en Google Maps.
 - Comparte y confirma el código de vinculación entre dispositivos mediante el servidor G.M.A.C.
+- Usa Firebase Firestore para compartir el código y el historial entre computadores conectados a Internet.
+
+## Activar Firebase
+
+La configuración del proyecto Firebase está en `firebase-config.js`. En Firebase Console abre **Firestore Database > Reglas** y pega el contenido de `firestore.rules`; pulsa **Publicar** para probar la aplicación. Estas reglas son solo para desarrollo porque permiten acceso mediante el código. Antes de publicar la aplicación, agrega Firebase Authentication y reglas que validen al usuario autenticado.
+
+Abre la aplicación mediante `node server.js` y visita la dirección mostrada por el servidor. El código y el historial se guardarán primero en Firestore; el servidor local queda como respaldo si Firebase no responde.
 
 ## Nota
 

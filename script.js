@@ -43,7 +43,6 @@ const userPairingBox = document.getElementById('userPairingBox');
 const userPairingCode = document.getElementById('userPairingCode');
 const copyPairingBtn = document.getElementById('copyPairingBtn');
 const refreshPairingBtn = document.getElementById('refreshPairingBtn');
-const tutorUserPhone = document.getElementById('tutorUserPhone');
 const emergencyTutorPhone = document.getElementById('emergencyTutorPhone');
 const emergencyBtn = document.getElementById('emergencyBtn');
 const registerTutorBtn = document.getElementById('registerTutorBtn');
@@ -210,7 +209,40 @@ function isSharedServerAvailable() {
   return window.location.protocol === 'http:' || window.location.protocol === 'https:';
 }
 
+async function getFirebaseApi() {
+  try {
+    return await window.gmacFirebaseReady;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function getFirebasePairing(code) {
+  const firebase = await getFirebaseApi();
+  if (!firebase || !code) return null;
+
+  const pairingSnapshot = await firebase.getDoc(firebase.doc(firebase.db, 'pairings', code));
+  return pairingSnapshot.exists() ? pairingSnapshot.data() : null;
+}
+
 async function savePairingCodeToServer(code) {
+  const firebase = await getFirebaseApi();
+  if (firebase) {
+    try {
+      await firebase.setDoc(firebase.doc(firebase.db, 'pairings', code), {
+        code,
+        phone: '',
+        tutorPhone: emergencyTutorPhone?.value || '',
+        createdAt: Date.now(),
+        confirmedAt: 0,
+        tutorEmail: ''
+      });
+      sharedPairingCode = code;
+      return true;
+    } catch (error) {
+      // Se intenta el servidor local como respaldo.
+    }
+  }
   if (!isSharedServerAvailable()) return false;
 
   try {
@@ -231,7 +263,14 @@ async function savePairingCodeToServer(code) {
   }
 }
 
-async function loadPairingCodeFromServer() {
+async function loadPairingCodeFromServer(requestedCode = '') {
+  const firebase = await getFirebaseApi();
+  const firebasePairing = await getFirebasePairing(normalizePairingCode(requestedCode) || sharedPairingCode || getPairingCode());
+  if (firebase && firebasePairing) {
+    sharedPairingCode = normalizePairingCode(firebasePairing.code);
+    linkedUserPhone = String(firebasePairing.phone || '').replace(/\D/g, '');
+    return sharedPairingCode;
+  }
   if (!isSharedServerAvailable()) return '';
 
   try {
@@ -247,6 +286,19 @@ async function loadPairingCodeFromServer() {
 }
 
 async function confirmPairingOnServer(code, tutorEmail, tutorPhone) {
+  const firebase = await getFirebaseApi();
+  if (firebase) {
+    try {
+      await firebase.setDoc(firebase.doc(firebase.db, 'pairings', code), {
+        confirmedAt: Date.now(),
+        tutorEmail,
+        tutorPhone
+      }, { merge: true });
+      return true;
+    } catch (error) {
+      // Se intenta el servidor local como respaldo.
+    }
+  }
   if (!isSharedServerAvailable()) return false;
 
   try {
@@ -265,6 +317,15 @@ async function checkPairingConfirmation() {
   if (currentRole !== 'user' || !isSharedServerAvailable()) return;
   const code = getPairingCode();
   if (!code) return;
+
+  const firebasePairing = await getFirebasePairing(code);
+  if (firebasePairing) {
+    if (firebasePairing.tutorPhone && emergencyTutorPhone) emergencyTutorPhone.value = firebasePairing.tutorPhone;
+    if (firebasePairing.confirmedAt) {
+      setStatus(`Conexión confirmada con el tutor${firebasePairing.tutorEmail ? ` (${firebasePairing.tutorEmail})` : ''}.`, 'success');
+    }
+    return;
+  }
 
   try {
     const response = await fetch('/api/pairing', { cache: 'no-store' });
@@ -366,6 +427,20 @@ async function syncHistoryToServer() {
   const code = sharedPairingCode || getPairingCode();
   if (!code) return;
 
+  const firebase = await getFirebaseApi();
+  if (firebase) {
+    try {
+      const historyEntries = getHistory();
+      await Promise.all(historyEntries.map((entry) => firebase.setDoc(
+        firebase.doc(firebase.db, 'pairings', code, 'history', entry.id),
+        entry
+      )));
+      return;
+    } catch (error) {
+      // Se intenta el servidor local como respaldo.
+    }
+  }
+
   try {
     await fetch('/api/history', {
       method: 'POST',
@@ -381,6 +456,18 @@ async function checkRemoteHistory() {
   if (currentRole !== 'tutor' || !isSharedServerAvailable()) return;
   const code = sharedPairingCode || await loadPairingCodeFromServer();
   if (!code) return;
+
+  const firebase = await getFirebaseApi();
+  if (firebase) {
+    try {
+      const historySnapshot = await firebase.getDocs(firebase.collection(firebase.db, 'pairings', code, 'history'));
+      sharedHistory = historySnapshot.docs.map((historyDoc) => historyDoc.data());
+      updateHistoryList();
+      return;
+    } catch (error) {
+      // Se intenta el servidor local como respaldo.
+    }
+  }
 
   try {
     const response = await fetch(`/api/history?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
@@ -746,7 +833,7 @@ function callTutorAutomatically() {
 
 function callContact() {
   const cleanPhone = currentRole === 'tutor'
-    ? (tutorUserPhone?.value || linkedUserPhone || '').replace(/\D/g, '')
+    ? linkedUserPhone.replace(/\D/g, '')
     : (tutorPhone.value || '').replace(/\D/g, '');
   if (!cleanPhone) {
     setStatus(currentRole === 'tutor'
@@ -1078,21 +1165,9 @@ callRailBtn?.addEventListener('click', () => {
   if (currentRole === 'tutor') callContact();
   else callTutorAutomatically();
 });
-tutorUserPhone?.addEventListener('input', () => updateInfoPanel());
 [tutorName, tutorEmail, tutorPhone, userName, userEmail].forEach((field) => {
   field?.addEventListener('input', () => updateInfoPanel());
 });
-emergencyTutorPhone?.addEventListener('input', () => {
-  if (currentRole !== 'tutor') return;
-  tutorPhone.value = emergencyTutorPhone.value;
-  localStorage.setItem(TUTOR_KEY, JSON.stringify({
-    name: tutorName.value.trim(),
-    email: tutorEmail.value.trim(),
-    phone: emergencyTutorPhone.value.trim()
-  }));
-  updateInfoPanel();
-});
-
 copyPairingBtn.addEventListener('click', copyPairingCode);
 refreshPairingBtn.addEventListener('click', async () => {
   await generatePairingCode();
@@ -1136,7 +1211,7 @@ tutorLoginForm.addEventListener('submit', async (event) => {
     return;
   }
 
-  const expectedPairingCode = await loadPairingCodeFromServer() || getPairingCode();
+  const expectedPairingCode = await loadPairingCodeFromServer(pairingCode) || getPairingCode();
   if (!expectedPairingCode || pairingCode !== expectedPairingCode) {
     setStatus('El código de vinculación no coincide con el generado por la persona usuaria. Revisa que sea el mismo y que no haya caducado.', 'error');
     return;

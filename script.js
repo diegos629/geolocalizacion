@@ -246,6 +246,7 @@ async function getFirebasePairing(code) {
 
 async function savePairingCodeToServer(code) {
   const firebase = await getFirebaseApi();
+  let saved = false;
   if (firebase) {
     try {
       await firebase.setDoc(firebase.doc(firebase.db, 'pairings', code), {
@@ -256,13 +257,12 @@ async function savePairingCodeToServer(code) {
         confirmedAt: 0,
         tutorEmail: ''
       });
-      sharedPairingCode = code;
-      return true;
+      saved = true;
     } catch (error) {
       // Se intenta el servidor local como respaldo.
     }
   }
-  if (!isSharedServerAvailable()) return false;
+  if (!isSharedServerAvailable()) return saved;
 
   try {
     const response = await fetch('/api/pairing', {
@@ -274,17 +274,32 @@ async function savePairingCodeToServer(code) {
         tutorPhone: emergencyTutorPhone?.value || ''
       })
     });
-    if (!response.ok) return false;
-    sharedPairingCode = code;
-    return true;
+    if (response.ok) saved = true;
   } catch (error) {
-    return false;
+    // Firebase puede seguir siendo suficiente para vincular los dispositivos.
   }
+  if (saved) sharedPairingCode = code;
+  return saved;
 }
 
 async function loadPairingCodeFromServer(requestedCode = '') {
+  const normalizedRequestedCode = normalizePairingCode(requestedCode);
+  if (normalizedRequestedCode && isSharedServerAvailable()) {
+    try {
+      const response = await fetch(`/api/pairing?code=${encodeURIComponent(normalizedRequestedCode)}`, { cache: 'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        sharedPairingCode = rememberPairingCode(data.code, data.createdAt);
+        linkedUserPhone = String(data.phone || '').replace(/\D/g, '');
+        return sharedPairingCode;
+      }
+    } catch (error) {
+      // Se intenta Firebase a continuacion.
+    }
+  }
+
   const firebase = await getFirebaseApi();
-  const firebasePairing = await getFirebasePairing(normalizePairingCode(requestedCode) || sharedPairingCode || getPairingCode());
+  const firebasePairing = await getFirebasePairing(normalizedRequestedCode || sharedPairingCode || getPairingCode());
   if (firebase && firebasePairing) {
     sharedPairingCode = rememberPairingCode(firebasePairing.code, firebasePairing.createdAt);
     linkedUserPhone = String(firebasePairing.phone || '').replace(/\D/g, '');
@@ -293,7 +308,6 @@ async function loadPairingCodeFromServer(requestedCode = '') {
   if (!isSharedServerAvailable()) return '';
 
   try {
-    const normalizedRequestedCode = normalizePairingCode(requestedCode);
     const query = normalizedRequestedCode ? `?code=${encodeURIComponent(normalizedRequestedCode)}` : '';
     const response = await fetch(`/api/pairing${query}`, { cache: 'no-store' });
     if (!response.ok) return '';
@@ -308,6 +322,7 @@ async function loadPairingCodeFromServer(requestedCode = '') {
 
 async function confirmPairingOnServer(code, tutorEmail, tutorPhone) {
   const firebase = await getFirebaseApi();
+  let confirmed = false;
   if (firebase) {
     try {
       await firebase.setDoc(firebase.doc(firebase.db, 'pairings', code), {
@@ -315,12 +330,12 @@ async function confirmPairingOnServer(code, tutorEmail, tutorPhone) {
         tutorEmail,
         tutorPhone
       }, { merge: true });
-      return true;
+      confirmed = true;
     } catch (error) {
       // Se intenta el servidor local como respaldo.
     }
   }
-  if (!isSharedServerAvailable()) return false;
+  if (!isSharedServerAvailable()) return confirmed;
 
   try {
     const response = await fetch('/api/pairing/confirm', {
@@ -328,10 +343,11 @@ async function confirmPairingOnServer(code, tutorEmail, tutorPhone) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ code, tutorEmail, tutorPhone })
     });
-    return response.ok;
+    if (response.ok) confirmed = true;
   } catch (error) {
-    return false;
+    // El otro dispositivo puede estar usando Firebase.
   }
+  return confirmed;
 }
 
 async function checkPairingConfirmation() {

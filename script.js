@@ -293,7 +293,9 @@ async function loadPairingCodeFromServer(requestedCode = '') {
   if (!isSharedServerAvailable()) return '';
 
   try {
-    const response = await fetch('/api/pairing', { cache: 'no-store' });
+    const normalizedRequestedCode = normalizePairingCode(requestedCode);
+    const query = normalizedRequestedCode ? `?code=${encodeURIComponent(normalizedRequestedCode)}` : '';
+    const response = await fetch(`/api/pairing${query}`, { cache: 'no-store' });
     if (!response.ok) return '';
     const data = await response.json();
     sharedPairingCode = rememberPairingCode(data.code, data.createdAt);
@@ -347,7 +349,7 @@ async function checkPairingConfirmation() {
   }
 
   try {
-    const response = await fetch('/api/pairing', { cache: 'no-store' });
+    const response = await fetch(`/api/pairing?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
     if (!response.ok) return;
     const data = await response.json();
     if (normalizePairingCode(data.code) !== code) return;

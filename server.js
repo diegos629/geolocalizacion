@@ -74,6 +74,11 @@ const server = http.createServer((request, response) => {
   }
 
   if (requestUrl.pathname === '/api/pairing' && request.method === 'GET') {
+    const requestedCode = String(requestUrl.searchParams.get('code') || '').replace(/\s+/g, '').toUpperCase();
+    if (requestedCode && requestedCode !== pairing.code) {
+      sendJson(response, 404, { error: 'Codigo de vinculacion no encontrado' });
+      return;
+    }
     sendJson(response, 200, pairing);
     return;
   }

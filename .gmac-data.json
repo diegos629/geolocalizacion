@@ -1,8 +1,8 @@
 {
-  "code": "GMAC-1234",
-  "phone": "541112345678",
-  "tutorPhone": "5491112345678",
-  "createdAt": 1789569515742,
-  "confirmedAt": 0,
-  "tutorEmail": ""
+  "code": "GMAC-7391",
+  "phone": "",
+  "tutorPhone": "5551234",
+  "createdAt": 1789597863932,
+  "confirmedAt": 1789597865572,
+  "tutorEmail": "tutor@prueba.com"
 }

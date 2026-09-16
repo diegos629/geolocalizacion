@@ -17,6 +17,7 @@ const watchToggle = document.getElementById('watchToggle');
 const loginCard = document.getElementById('loginCard');
 const appContent = document.getElementById('appContent');
 const locationPanel = document.getElementById('locationPanel');
+const locationRailBtn = document.getElementById('locationRailBtn');
 const userLoginForm = document.getElementById('userLoginForm');
 const tutorLoginForm = document.getElementById('tutorLoginForm');
 const userRoleBtn = document.getElementById('userRoleBtn');
@@ -24,7 +25,6 @@ const tutorRoleBtn = document.getElementById('tutorRoleBtn');
 const loginIntro = document.getElementById('loginIntro');
 const userName = document.getElementById('userName');
 const userEmail = document.getElementById('userEmail');
-const userPhone = document.getElementById('userPhone');
 const userPassword = document.getElementById('userPassword');
 const loginEmail = document.getElementById('loginEmail');
 const loginPassword = document.getElementById('loginPassword');
@@ -60,7 +60,6 @@ const infoRailBtn = document.getElementById('infoRailBtn');
 const infoPanel = document.getElementById('infoPanel');
 const infoUserName = document.getElementById('infoUserName');
 const infoUserEmail = document.getElementById('infoUserEmail');
-const infoUserPhone = document.getElementById('infoUserPhone');
 const infoCode = document.getElementById('infoCode');
 const infoTutorName = document.getElementById('infoTutorName');
 const infoTutorEmail = document.getElementById('infoTutorEmail');
@@ -88,6 +87,9 @@ let sharedPairingCode = '';
 let linkedUserPhone = '';
 let alertPollTimer = null;
 let lastRemoteAlertId = 0;
+let pairingStatusTimer = null;
+let historyPollTimer = null;
+let sharedHistory = null;
 registerTutorBtn.hidden = true;
 registerTutorBtn.setAttribute('aria-hidden', 'true');
 registerTutorBtn.style.display = 'none';
@@ -217,7 +219,7 @@ async function savePairingCodeToServer(code) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         code,
-        phone: userPhone?.value || '',
+        phone: '',
         tutorPhone: emergencyTutorPhone?.value || ''
       })
     });
@@ -242,6 +244,53 @@ async function loadPairingCodeFromServer() {
   } catch (error) {
     return '';
   }
+}
+
+async function confirmPairingOnServer(code, tutorEmail, tutorPhone) {
+  if (!isSharedServerAvailable()) return false;
+
+  try {
+    const response = await fetch('/api/pairing/confirm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, tutorEmail, tutorPhone })
+    });
+    return response.ok;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function checkPairingConfirmation() {
+  if (currentRole !== 'user' || !isSharedServerAvailable()) return;
+  const code = getPairingCode();
+  if (!code) return;
+
+  try {
+    const response = await fetch('/api/pairing', { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (normalizePairingCode(data.code) !== code) return;
+    if (data.tutorPhone && emergencyTutorPhone) {
+      emergencyTutorPhone.value = data.tutorPhone;
+    }
+    if (data.confirmedAt) {
+      setStatus(`Conexión confirmada con el tutor${data.tutorEmail ? ` (${data.tutorEmail})` : ''}.`, 'success');
+    }
+  } catch (error) {
+    // La confirmación se reintentará en la siguiente consulta.
+  }
+}
+
+function startPairingConfirmationPolling() {
+  if (pairingStatusTimer) clearInterval(pairingStatusTimer);
+  checkPairingConfirmation();
+  pairingStatusTimer = setInterval(checkPairingConfirmation, 3000);
+}
+
+function stopPairingConfirmationPolling() {
+  if (pairingStatusTimer) clearInterval(pairingStatusTimer);
+  pairingStatusTimer = null;
 }
 
 async function sendAlertToServer(message) {
@@ -312,7 +361,54 @@ function getPairingCode() {
   return '';
 }
 
+async function syncHistoryToServer() {
+  if (currentRole !== 'user' || !isSharedServerAvailable()) return;
+  const code = sharedPairingCode || getPairingCode();
+  if (!code) return;
+
+  try {
+    await fetch('/api/history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, entries: getHistory() })
+    });
+  } catch (error) {
+    // El historial local permanece disponible si el servidor no responde.
+  }
+}
+
+async function checkRemoteHistory() {
+  if (currentRole !== 'tutor' || !isSharedServerAvailable()) return;
+  const code = sharedPairingCode || await loadPairingCodeFromServer();
+  if (!code) return;
+
+  try {
+    const response = await fetch(`/api/history?code=${encodeURIComponent(code)}`, { cache: 'no-store' });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (Array.isArray(data.entries)) {
+      sharedHistory = data.entries;
+      updateHistoryList();
+    }
+  } catch (error) {
+    // El tutor conserva el último historial recibido si el servidor no responde.
+  }
+}
+
+function startHistoryPolling() {
+  if (historyPollTimer) clearInterval(historyPollTimer);
+  checkRemoteHistory();
+  historyPollTimer = setInterval(checkRemoteHistory, 3000);
+}
+
+function stopHistoryPolling() {
+  if (historyPollTimer) clearInterval(historyPollTimer);
+  historyPollTimer = null;
+  sharedHistory = null;
+}
+
 function getHistory() {
+  if (currentRole === 'tutor' && Array.isArray(sharedHistory)) return sharedHistory;
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return defaultHistory;
 
@@ -388,6 +484,7 @@ function addEventToHistory(type, note) {
   entries.push(newEntry);
   saveHistory(entries);
   updateHistoryList();
+  syncHistoryToServer();
 
   if (['Caída', 'Desmayo', 'Problema clínico', 'Mareos'].includes(type)) {
     triggerTutorAlert(`Evento detectado: ${type}. Observación: ${note}`);
@@ -433,7 +530,6 @@ function loadUserProfile() {
     const profile = JSON.parse(stored);
     userName.value = profile.name || '';
     userEmail.value = profile.email || '';
-    userPhone.value = profile.phone || '';
   } catch (error) {
     localStorage.removeItem(USER_PROFILE_KEY);
   }
@@ -478,6 +574,9 @@ function showAppContent(role = 'tutor') {
     openRailBtn.setAttribute('aria-expanded', 'false');
   }
   locationPanel.classList.toggle('hidden', role !== 'tutor');
+  locationPanel.setAttribute('aria-hidden', String(role !== 'tutor'));
+  locationRailBtn?.classList.toggle('hidden', role !== 'tutor');
+  locationRailBtn?.setAttribute('aria-hidden', String(role !== 'tutor'));
   userPairingBox.classList.toggle('hidden', role !== 'user');
   tutorPanel.classList.toggle('hidden', role !== 'tutor');
   registerTutorBtn.hidden = true;
@@ -503,20 +602,27 @@ function showAppContent(role = 'tutor') {
   }
 
   accountBadge.textContent = currentAccountEmail ? `${role === 'user' ? 'Usuario' : 'Tutor'}: ${currentAccountEmail}` : 'Cuenta activa';
-  pairingCodeEl.textContent = getPairingCode() || '--';
-  userPairingCode.textContent = getPairingCode() || '--';
+  if (pairingCodeEl) pairingCodeEl.textContent = getPairingCode() || '--';
+  if (userPairingCode) userPairingCode.textContent = getPairingCode() || '--';
   updateHistoryList();
   updateInstallPromptState();
   updateInfoPanel(role);
-  if (role === 'tutor') startAlertPolling();
-  else stopAlertPolling();
+  if (role === 'tutor') {
+    startAlertPolling();
+    startHistoryPolling();
+  }
+  else {
+    stopAlertPolling();
+    stopHistoryPolling();
+    startPairingConfirmationPolling();
+  }
+  if (role === 'tutor') stopPairingConfirmationPolling();
 }
 
 function updateInfoPanel(role = currentRole) {
-  if (!infoUserName || !infoUserEmail || !infoUserPhone || !infoCode) return;
+  if (!infoUserName || !infoUserEmail || !infoCode) return;
   infoUserName.textContent = userName.value || 'No registrado';
   infoUserEmail.textContent = userEmail.value || 'No registrado';
-  infoUserPhone.textContent = userPhone.value || 'No registrado';
   infoCode.textContent = getPairingCode() || '--';
   infoTutorName.textContent = tutorName.value || 'No registrado';
   infoTutorEmail.textContent = tutorEmail.value || 'No registrado';
@@ -526,6 +632,8 @@ function updateInfoPanel(role = currentRole) {
 function resetToLoginScreen() {
   currentAccountEmail = '';
   stopAlertPolling();
+  stopHistoryPolling();
+  stopPairingConfirmationPolling();
   sessionStorage.removeItem(SESSION_KEY);
   loginCard.classList.remove('hidden');
   appContent.classList.add('hidden');
@@ -565,10 +673,13 @@ async function generatePairingCode() {
   globalThis.crypto.getRandomValues(randomBytes);
   const code = normalizePairingCode(`GMAC-${String(randomBytes[0] % 10000).padStart(4, '0')}`);
   localStorage.setItem(PAIRING_KEY, JSON.stringify({ code, createdAt: Date.now() }));
-  await savePairingCodeToServer(code);
-  pairingCodeEl.textContent = code;
-  userPairingCode.textContent = code;
-  setStatus('Código generado. Compártelo con el tutor.', 'success');
+  const savedOnServer = await savePairingCodeToServer(code);
+  await syncHistoryToServer();
+  if (pairingCodeEl) pairingCodeEl.textContent = code;
+  if (userPairingCode) userPairingCode.textContent = code;
+  setStatus(savedOnServer || !isSharedServerAvailable()
+    ? 'Código generado. Compártelo con el tutor.'
+    : 'Código generado solo en este equipo. No se pudo conectar al servidor compartido.', savedOnServer || !isSharedServerAvailable() ? 'success' : 'error');
   return code;
 }
 
@@ -844,7 +955,7 @@ function handleHeartRate(event) {
 
   setBluetoothStatus(`Ritmo cardíaco: ${heartRate} BPM${isAbnormal ? ' (revisar)' : ''}.`, isAbnormal ? 'error' : 'success');
 
-  if (!watchToggle.checked || !isAbnormal) {
+  if (!watchToggle || !watchToggle.checked || !isAbnormal) {
     abnormalHeartRateReadings = 0;
     return;
   }
@@ -865,7 +976,7 @@ async function startHeartRateMonitoring() {
     heartRateCharacteristic = await service.getCharacteristic(HEART_RATE_CHARACTERISTIC);
     heartRateCharacteristic.addEventListener('characteristicvaluechanged', handleHeartRate);
     await heartRateCharacteristic.startNotifications();
-    watchToggle.checked = true;
+    if (watchToggle) watchToggle.checked = true;
     setBluetoothStatus('Reloj conectado y vigilancia cardíaca activa.', 'success');
   } catch (error) {
     setBluetoothStatus('Reloj conectado, pero no ofrece frecuencia cardíaca compatible.', 'error');
@@ -942,22 +1053,6 @@ installBtn.addEventListener('click', async () => {
   updateInstallPromptState();
 });
 
-watchToggle.addEventListener('change', () => {
-  if (watchToggle.checked) {
-    setStatus('Vigilancia cardíaca activada.', 'success');
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission().catch(() => {});
-    }
-  } else {
-    setStatus('Vigilancia cardíaca desactivada.', 'success');
-  }
-});
-
-sendAlertBtn.addEventListener('click', () => {
-  const reason = 'Alerta enviada manualmente al tutor por posible recaída o problema clínico.';
-  triggerTutorAlert(reason);
-});
-
 userRoleBtn.addEventListener('click', () => setLoginRole('user'));
 tutorRoleBtn.addEventListener('click', () => setLoginRole('tutor'));
 
@@ -984,10 +1079,11 @@ callRailBtn?.addEventListener('click', () => {
   else callTutorAutomatically();
 });
 tutorUserPhone?.addEventListener('input', () => updateInfoPanel());
-[tutorName, tutorEmail, tutorPhone, userName, userEmail, userPhone].forEach((field) => {
+[tutorName, tutorEmail, tutorPhone, userName, userEmail].forEach((field) => {
   field?.addEventListener('input', () => updateInfoPanel());
 });
 emergencyTutorPhone?.addEventListener('input', () => {
+  if (currentRole !== 'tutor') return;
   tutorPhone.value = emergencyTutorPhone.value;
   localStorage.setItem(TUTOR_KEY, JSON.stringify({
     name: tutorName.value.trim(),
@@ -997,7 +1093,6 @@ emergencyTutorPhone?.addEventListener('input', () => {
   updateInfoPanel();
 });
 
-generateCodeBtn.addEventListener('click', generatePairingCode);
 copyPairingBtn.addEventListener('click', copyPairingCode);
 refreshPairingBtn.addEventListener('click', async () => {
   await generatePairingCode();
@@ -1014,7 +1109,7 @@ userLoginForm.addEventListener('submit', async (event) => {
   }
 
   currentAccountEmail = email;
-  localStorage.setItem(USER_PROFILE_KEY, JSON.stringify({ name, email, phone: userPhone.value.trim(), updatedAt: Date.now() }));
+  localStorage.setItem(USER_PROFILE_KEY, JSON.stringify({ name, email, updatedAt: Date.now() }));
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role: 'user', name, email }));
   userPassword.value = '';
   const userEventForm = document.getElementById('eventForm');
@@ -1047,6 +1142,12 @@ tutorLoginForm.addEventListener('submit', async (event) => {
     return;
   }
 
+  const pairingConfirmed = await confirmPairingOnServer(pairingCode, email, tutorPhone.value.trim());
+  if (!pairingConfirmed && isSharedServerAvailable()) {
+    setStatus('No se pudo confirmar la conexión con el servidor compartido. Revisa la dirección y vuelve a intentarlo.', 'error');
+    return;
+  }
+
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ role: 'tutor', email }));
   currentAccountEmail = email;
   tutorEmail.value = email;
@@ -1061,17 +1162,8 @@ tutorLoginForm.addEventListener('submit', async (event) => {
     tutorEventForm.classList.add('hidden');
   }
   showAppContent();
-  setStatus('Sesión de tutor iniciada y cuenta vinculada.', 'success');
+  setStatus('Sesión de tutor iniciada y conexión confirmada.', 'success');
   getLocation();
-});
-
-saveTutorBtn.addEventListener('click', () => {
-  const tutor = saveTutorData();
-  if (!tutor.name && !tutor.email && !tutor.phone) {
-    setStatus('Complete el nombre, el correo o el teléfono del tutor para vincularlo.', 'error');
-    return;
-  }
-  setStatus('Tutor vinculado correctamente.', 'success');
 });
 
 emergencyBtn.addEventListener('click', async () => {

@@ -5,8 +5,30 @@ const path = require('path');
 
 const root = __dirname;
 const port = 8000;
-let pairing = { code: '', phone: '', tutorPhone: '', createdAt: 0 };
+const dataFile = path.join(root, '.gmac-data.json');
+let pairing = loadPairing();
 let latestAlert = null;
+let sharedHistory = [];
+
+function loadPairing() {
+  try {
+    const saved = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    return {
+      code: String(saved.code || ''),
+      phone: String(saved.phone || ''),
+      tutorPhone: String(saved.tutorPhone || ''),
+      createdAt: Number(saved.createdAt || 0),
+      confirmedAt: Number(saved.confirmedAt || 0),
+      tutorEmail: String(saved.tutorEmail || '')
+    };
+  } catch (error) {
+    return { code: '', phone: '', tutorPhone: '', createdAt: 0, confirmedAt: 0, tutorEmail: '' };
+  }
+}
+
+function savePairing() {
+  fs.writeFileSync(dataFile, JSON.stringify(pairing, null, 2));
+}
 
 const mimeTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -71,9 +93,68 @@ const server = http.createServer((request, response) => {
           code,
           phone: String(data.phone || '').replace(/\D/g, ''),
           tutorPhone: String(data.tutorPhone || '').replace(/\D/g, ''),
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          confirmedAt: 0,
+          tutorEmail: ''
         };
+        sharedHistory = [];
+        savePairing();
         sendJson(response, 200, { ok: true, code });
+      } catch (error) {
+        sendJson(response, 400, { error: 'Solicitud invalida' });
+      }
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/pairing/confirm' && request.method === 'POST') {
+    let body = '';
+    request.on('data', (chunk) => { body += chunk; });
+    request.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const code = String(data.code || '').replace(/\s+/g, '').toUpperCase();
+        const tutorEmail = String(data.tutorEmail || '').trim().toLowerCase();
+        const tutorPhone = String(data.tutorPhone || '').replace(/\D/g, '');
+        if (!code || code !== pairing.code) {
+          sendJson(response, 409, { ok: false, error: 'Codigo no valido' });
+          return;
+        }
+        pairing.confirmedAt = Date.now();
+        pairing.tutorEmail = tutorEmail;
+        pairing.tutorPhone = tutorPhone;
+        savePairing();
+        sendJson(response, 200, { ok: true, confirmedAt: pairing.confirmedAt, tutorEmail });
+      } catch (error) {
+        sendJson(response, 400, { error: 'Solicitud invalida' });
+      }
+    });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/history' && request.method === 'GET') {
+    const code = String(requestUrl.searchParams.get('code') || '').replace(/\s+/g, '').toUpperCase();
+    if (!code || code !== pairing.code) {
+      sendJson(response, 409, { error: 'Codigo no valido' });
+      return;
+    }
+    sendJson(response, 200, { entries: sharedHistory });
+    return;
+  }
+
+  if (requestUrl.pathname === '/api/history' && request.method === 'POST') {
+    let body = '';
+    request.on('data', (chunk) => { body += chunk; });
+    request.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const code = String(data.code || '').replace(/\s+/g, '').toUpperCase();
+        if (!code || code !== pairing.code || !Array.isArray(data.entries)) {
+          sendJson(response, 400, { error: 'Datos del historial invalidos' });
+          return;
+        }
+        sharedHistory = data.entries.slice(-200);
+        sendJson(response, 200, { ok: true, count: sharedHistory.length });
       } catch (error) {
         sendJson(response, 400, { error: 'Solicitud invalida' });
       }

@@ -13,12 +13,12 @@ Proyecto sencillo en HTML, CSS y JavaScript para obtener la ubicación actual de
    ```text
    http://localhost:8000
    ```
-4. Conecta el celular a la misma red Wi-Fi, busca la IPv4 de la PC con `ipconfig` y abre:
+4. Para conectar otro computador o celular, ambos deben abrir la misma dirección del servidor. En una red local, conecta el dispositivo a la misma red Wi-Fi, busca la IPv4 de la PC con `ipconfig` y abre:
    ```text
    http://IP-DE-LA-PC:8000
    ```
 
-Si el celular no puede abrir la dirección, ejecuta `abrir-firewall-gmac.bat` como administrador y permite Node.js en la red privada de Windows. La PC y el celular no deben usar redes Wi-Fi distintas ni una red de invitados.
+Si el celular no puede abrir la dirección, ejecuta `abrir-firewall-gmac.bat` como administrador y permite Node.js en la red privada de Windows. La PC y el celular no deben usar redes Wi-Fi distintas ni una red de invitados. Para computadores fuera de esa red, publica este servidor con una URL HTTPS compartida y abre esa misma URL en ambos equipos.
 
 No abras `index.html` directamente con `file://`: en ese modo cada dispositivo usa su propio almacenamiento y no puede compartir el código.
 
@@ -27,7 +27,7 @@ No abras `index.html` directamente con `file://`: en ese modo cada dispositivo u
 - Solicita acceso a la ubicación del usuario.
 - Muestra latitud, longitud, precisión y hora.
 - Genera un enlace para ver la posición en Google Maps.
-- Comparte el código de vinculación entre dispositivos mediante el servidor G.M.A.C.
+- Comparte y confirma el código de vinculación entre dispositivos mediante el servidor G.M.A.C.
 
 ## Nota
 

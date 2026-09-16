@@ -236,8 +236,12 @@ async function getFirebasePairing(code) {
   const firebase = await getFirebaseApi();
   if (!firebase || !code) return null;
 
-  const pairingSnapshot = await firebase.getDoc(firebase.doc(firebase.db, 'pairings', code));
-  return pairingSnapshot.exists() ? pairingSnapshot.data() : null;
+  try {
+    const pairingSnapshot = await firebase.getDoc(firebase.doc(firebase.db, 'pairings', code));
+    return pairingSnapshot.exists() ? pairingSnapshot.data() : null;
+  } catch (error) {
+    return null;
+  }
 }
 
 async function savePairingCodeToServer(code) {
@@ -788,11 +792,13 @@ async function generatePairingCode() {
   const randomBytes = new Uint32Array(1);
   globalThis.crypto.getRandomValues(randomBytes);
   const code = normalizePairingCode(`GMAC-${String(randomBytes[0] % 10000).padStart(4, '0')}`);
-  localStorage.setItem(PAIRING_KEY, JSON.stringify({ code, createdAt: Date.now() }));
-  const savedOnServer = await savePairingCodeToServer(code);
-  await syncHistoryToServer();
+  rememberPairingCode(code);
   if (pairingCodeEl) pairingCodeEl.textContent = code;
   if (userPairingCode) userPairingCode.textContent = code;
+  updateInfoPanel('user');
+  setStatus('Guardando el código para conectarlo con el tutor...');
+  const savedOnServer = await savePairingCodeToServer(code);
+  await syncHistoryToServer();
   setStatus(savedOnServer || !isSharedServerAvailable()
     ? 'Código generado. Compártelo con el tutor.'
     : 'Código generado solo en este equipo. No se pudo conectar al servidor compartido.', savedOnServer || !isSharedServerAvailable() ? 'success' : 'error');

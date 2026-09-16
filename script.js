@@ -205,6 +205,21 @@ function normalizePairingCode(value = '') {
   return String(value ?? '').trim().replace(/\s+/g, '').toUpperCase();
 }
 
+function rememberPairingCode(code, createdAt = Date.now()) {
+  const normalizedCode = normalizePairingCode(code);
+  if (!normalizedCode) return '';
+
+  const numericTimestamp = Number(createdAt);
+  const timestamp = numericTimestamp > 0
+    ? (numericTimestamp < 1000000000000 ? numericTimestamp * 1000 : numericTimestamp)
+    : Date.now();
+  localStorage.setItem(PAIRING_KEY, JSON.stringify({
+    code: normalizedCode,
+    createdAt: timestamp
+  }));
+  return normalizedCode;
+}
+
 function isSharedServerAvailable() {
   return window.location.protocol === 'http:' || window.location.protocol === 'https:';
 }
@@ -267,7 +282,7 @@ async function loadPairingCodeFromServer(requestedCode = '') {
   const firebase = await getFirebaseApi();
   const firebasePairing = await getFirebasePairing(normalizePairingCode(requestedCode) || sharedPairingCode || getPairingCode());
   if (firebase && firebasePairing) {
-    sharedPairingCode = normalizePairingCode(firebasePairing.code);
+    sharedPairingCode = rememberPairingCode(firebasePairing.code, firebasePairing.createdAt);
     linkedUserPhone = String(firebasePairing.phone || '').replace(/\D/g, '');
     return sharedPairingCode;
   }
@@ -277,7 +292,7 @@ async function loadPairingCodeFromServer(requestedCode = '') {
     const response = await fetch('/api/pairing', { cache: 'no-store' });
     if (!response.ok) return '';
     const data = await response.json();
-    sharedPairingCode = normalizePairingCode(data.code);
+    sharedPairingCode = rememberPairingCode(data.code, data.createdAt);
     linkedUserPhone = String(data.phone || '').replace(/\D/g, '');
     return sharedPairingCode;
   } catch (error) {
@@ -633,6 +648,7 @@ function loadTutorSession() {
       userEmail.value = session.email || '';
       currentAccountEmail = session.email || '';
       showAppContent('user');
+      restoreUserPairingCode();
       return true;
     }
     loginEmail.value = session.email || '';
@@ -704,6 +720,19 @@ function showAppContent(role = 'tutor') {
     startPairingConfirmationPolling();
   }
   if (role === 'tutor') stopPairingConfirmationPolling();
+}
+
+async function restoreUserPairingCode() {
+  const code = await loadPairingCodeFromServer();
+  if (!code) {
+    setStatus('No se encontró el código de vinculación. Genera uno nuevo para conectar al tutor.', 'error');
+    return;
+  }
+
+  if (pairingCodeEl) pairingCodeEl.textContent = code;
+  if (userPairingCode) userPairingCode.textContent = code;
+  updateInfoPanel('user');
+  setStatus('Código de vinculación recuperado. Compártelo con tu tutor.', 'success');
 }
 
 function updateInfoPanel(role = currentRole) {
